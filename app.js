@@ -332,7 +332,7 @@ function renderHistory() {
   }
 }
 
-function saveSet() {
+function saveSet(force = false) {   // force = true: user tapped "Save anyway" on the sanity check
   const ex = exercise(currentId);
   const set = { id: uid(), exerciseId: currentId, at: Date.now() };
 
@@ -347,6 +347,21 @@ function saveSet() {
     set.reps = parseInt($('#reps').value, 10);
     if (isNaN(set.weight) || set.weight < 0) { toast('Enter a weight'); $('#weight').focus(); return; }
     if (isNaN(set.reps) || set.reps <= 0) { toast('Enter reps'); $('#reps').focus(); return; }
+  }
+
+  // Sanity check: catch a fat-fingered extra digit before it becomes a fake PB.
+  const wild = ex.kind === 'row'
+    ? (set.seconds / (ex.metres / 500) < 60 || set.seconds > 4 * 3600)       // faster than 1:00 /500m, or over 4 hours
+    : (set.weight > 300 || set.reps > 100);
+  if (wild && !force) {
+    openSheet({
+      title: 'Really?',
+      text: ex.kind === 'row'
+        ? `${fmtTime(set.seconds)} for ${ex.name} is ${fmtTime(set.seconds / (ex.metres / 500))} per 500 m — world-record territory.`
+        : `${fmtWeight(set.weight)} kg × ${set.reps} is world-record territory.`,
+      actions: [{ label: 'Save anyway', kind: 'primary', onClick: () => saveSet(true) }],
+    });
+    return;
   }
 
   const before = bestSet(ex, setsFor(currentId));
@@ -471,7 +486,7 @@ $('#btn-settings').onclick = () => { location.hash = 'settings'; };
 $('#btn-settings-back').onclick = () => history.back();
 $('#btn-back').onclick = () => history.back();
 $('#btn-exercise-menu').onclick = exerciseMenu;
-$('#btn-save-set').onclick = saveSet;
+$('#btn-save-set').onclick = () => saveSet();   // not `= saveSet` — that would pass the click event as `force`
 $('#btn-export').onclick = exportBackup;
 $('#import-file').onchange = (e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ''; };
 

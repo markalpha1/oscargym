@@ -1,7 +1,7 @@
 /* Service worker: makes the app open with no signal.
    It saves a copy of every app file on first visit, then serves from that copy.
    IMPORTANT: bump CACHE when files change, or phones keep the old version. */
-const CACHE = 'oscargym-v3';
+const CACHE = 'oscargym-v4';
 const FILES = [
   './',
   './index.html',
