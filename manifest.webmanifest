@@ -1,0 +1,16 @@
+{
+  "name": "Oscar Gym",
+  "short_name": "Gym",
+  "description": "A minimal gym log: pick an exercise, see your history, record your sets and rowing times.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f10",
+  "theme_color": "#0f0f10",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

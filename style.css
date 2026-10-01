@@ -1,0 +1,135 @@
+/* ===== Oscar Gym — minimal dark theme =====
+   Everything is driven by these variables. Want a light theme? Change them. */
+:root {
+  --bg: #0f0f10;
+  --surface: #1a1a1c;
+  --surface-2: #242427;
+  --text: #f2f2f2;
+  --muted: #8a8a90;
+  --accent: #4ade80;      /* green: "go" */
+  --accent-text: #052e16;
+  --danger: #f87171;
+  --radius: 14px;
+  --gap: 12px;
+  --tap: 48px;            /* minimum touch target */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+body { overscroll-behavior-y: none; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+
+/* Each screen is full-height and scrolls on its own.
+   Padding uses safe-area insets so content clears the notch and home bar. */
+.screen {
+  position: fixed; inset: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+}
+.hidden { display: none !important; }
+
+/* ---- Top bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: rgba(15,15,16,0.85); backdrop-filter: blur(12px);
+}
+.topbar h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; flex: 1; text-align: center; }
+.topbar h1:first-child { text-align: left; }
+.icon-btn { width: var(--tap); height: var(--tap); font-size: 28px; line-height: 1; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn:active { color: var(--text); }
+
+/* ---- Tabs (Lifting | Rowing) ---- */
+.tabs { display: flex; margin: 0 16px 10px; padding: 3px; background: var(--surface); border-radius: 12px; }
+.tab { flex: 1; height: 38px; border-radius: 10px; color: var(--muted); font-size: 15px; font-weight: 600; transition: background 0.15s, color 0.15s; }
+.tab.active { background: var(--surface-2); color: var(--text); }
+
+/* Rowing time entry: [mins] : [secs] */
+.time-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.colon { font-size: 30px; font-weight: 600; color: var(--muted); }
+
+/* ---- Search ---- */
+.searchbar { padding: 4px 16px 8px; }
+.searchbar input {
+  width: 100%; height: 44px; border-radius: 12px; border: 0; padding: 0 14px;
+  background: var(--surface); color: var(--text); outline: none; -webkit-appearance: none;
+}
+.searchbar input::placeholder { color: var(--muted); }
+
+/* ---- Exercise list ---- */
+.list { padding: 0 16px 100px; }
+.group-title { margin: 20px 0 6px 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 56px; padding: 10px 14px; margin-bottom: 6px;
+  background: var(--surface); border-radius: var(--radius); text-align: left;
+}
+.row:active { background: var(--surface-2); }
+.row .name { font-size: 17px; font-weight: 500; }
+.row .last { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+/* Floating "+" button */
+.fab {
+  position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 32px; font-weight: 300;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+.fab:active { transform: scale(0.95); }
+
+/* ---- Logger (weight / reps / save) ---- */
+.logger { padding: 8px 16px 16px; display: grid; gap: var(--gap); }
+.field label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px 4px; }
+.field .unit { opacity: 0.7; }
+.stepper { display: grid; grid-template-columns: 56px 1fr 56px; height: 60px; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+.stepper .step { font-size: 28px; color: var(--muted); }
+.stepper .step:active { background: var(--surface-2); color: var(--text); }
+.stepper input {
+  width: 100%; height: 100%; border: 0; background: transparent; text-align: center;
+  font-size: 30px; font-weight: 600; outline: none; -moz-appearance: textfield;
+}
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.primary {
+  height: 56px; border-radius: var(--radius); background: var(--accent); color: var(--accent-text);
+  font-size: 18px; font-weight: 700;
+}
+.primary:active { filter: brightness(0.9); }
+.secondary {
+  display: block; width: 100%; height: 52px; line-height: 52px; text-align: center;
+  border-radius: var(--radius); background: var(--surface); font-size: 16px; font-weight: 500; margin-bottom: 10px;
+}
+.secondary:active { background: var(--surface-2); }
+
+.rest { text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 15px; padding: 4px; }
+.rest span { color: var(--text); font-weight: 600; }
+
+/* ---- History ---- */
+.history { padding: 0 16px 60px; }
+.day { margin-top: 18px; }
+.day-title { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin: 0 4px 6px; }
+.set {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border-radius: 10px; padding: 0 4px 0 14px; min-height: 48px; margin-bottom: 4px;
+  font-variant-numeric: tabular-nums; font-size: 17px;
+}
+.set .pb { font-size: 11px; font-weight: 700; color: var(--accent); margin-left: 8px; letter-spacing: 0.05em; }
+.set .del { width: 44px; height: 44px; color: var(--muted); font-size: 18px; }
+.set .del:active { color: var(--danger); }
+
+/* ---- Settings ---- */
+.settings { padding: 8px 16px; }
+.file-btn { cursor: pointer; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--surface-2); color: var(--text); padding: 10px 16px; border-radius: 999px; font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4); z-index: 10; white-space: nowrap;
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Oscar Gym</title>
+  <!-- viewport-fit=cover lets the app paint behind the iPhone notch / home bar -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0f0f10">
+  <meta name="description" content="A minimal gym log: pick an exercise, see your history, record your sets.">
+
+  <!-- Makes "Add to Home Screen" on iPhone open the app full-screen, no Safari bars -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gym">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Screen 1: the list (Lifting / Rowing tabs) ===== -->
+  <section id="screen-list" class="screen">
+    <header class="topbar">
+      <h1>Gym</h1>
+      <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙</button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="lift" role="tab">Lifting</button>
+      <button class="tab" data-tab="row" role="tab">Rowing</button>
+    </nav>
+
+    <div class="searchbar">
+      <input id="search" type="search" placeholder="Search…" autocomplete="off" autocorrect="off" autocapitalize="off">
+    </div>
+
+    <div id="exercise-list" class="list"></div>
+
+    <button id="btn-add-exercise" class="fab" aria-label="Add">+</button>
+  </section>
+
+  <!-- ===== Screen 2: one exercise — log a set, see history ===== -->
+  <section id="screen-exercise" class="screen hidden">
+    <header class="topbar">
+      <button id="btn-back" class="icon-btn" aria-label="Back">‹</button>
+      <h1 id="exercise-title">Exercise</h1>
+      <button id="btn-exercise-menu" class="icon-btn" aria-label="More">⋯</button>
+    </header>
+
+    <!-- Lifting: weight + reps -->
+    <div id="logger-lift" class="logger">
+      <div class="field">
+        <label for="weight">Weight <span class="unit">kg</span></label>
+        <div class="stepper">
+          <button class="step" data-target="weight" data-delta="-2.5">−</button>
+          <input id="weight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0">
+          <button class="step" data-target="weight" data-delta="2.5">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="reps">Reps</label>
+        <div class="stepper">
+          <button class="step" data-target="reps" data-delta="-1">−</button>
+          <input id="reps" type="number" inputmode="numeric" step="1" min="0" placeholder="0">
+          <button class="step" data-target="reps" data-delta="1">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rowing: time -->
+    <div id="logger-row" class="logger hidden">
+      <div class="field">
+        <label>Time <span class="unit">min : sec</span></label>
+        <div class="time-row">
+          <div class="stepper">
+            <button class="step" data-target="mins" data-delta="-1">−</button>
+            <input id="mins" type="number" inputmode="numeric" step="1" min="0" placeholder="0">
+            <button class="step" data-target="mins" data-delta="1">+</button>
+          </div>
+          <span class="colon">:</span>
+          <div class="stepper">
+            <button class="step" data-target="secs" data-delta="-1">−</button>
+            <input id="secs" type="number" inputmode="decimal" step="0.1" min="0" max="59.9" placeholder="00">
+            <button class="step" data-target="secs" data-delta="1">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="logger">
+      <button id="btn-save-set" class="primary">Save</button>
+      <div id="rest-timer" class="rest hidden">Rest <span id="rest-time">0:00</span></div>
+    </div>
+
+    <div id="history" class="history"></div>
+  </section>
+
+  <!-- ===== Settings ===== -->
+  <section id="screen-settings" class="screen hidden">
+    <header class="topbar">
+      <button id="btn-settings-back" class="icon-btn" aria-label="Back">‹</button>
+      <h1>Settings</h1>
+      <span class="icon-btn"></span>
+    </header>
+    <div class="settings">
+      <p class="muted">Your data lives on this phone only. Back it up now and then.</p>
+      <button id="btn-export" class="secondary">Export backup</button>
+      <label class="secondary file-btn">Import backup<input id="import-file" type="file" accept="application/json" hidden></label>
+      <p id="stats" class="muted"></p>
+      <p class="muted small">Oscar Gym · <span id="version"></span></p>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
