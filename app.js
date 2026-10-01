@@ -10,7 +10,7 @@
      row  — a time over a distance (500 m, 2,000 m…)
 */
 
-const VERSION = '0.3.0';
+const VERSION = '0.5.0';
 const STORAGE_KEY = 'oscargym.v1';
 
 /* ---------- 1. Data ---------- */
@@ -33,26 +33,83 @@ let db = load();
 
 function rowName(metres) { return metres >= 1000 ? `${(metres / 1000).toLocaleString()} km` : `${metres} m`; }
 
+// Starter exercises get fixed ids ("lift-bench-press", "row-2000") so two phones
+// signed into the same account agree on which "Bench press" is which.
+function starterId(kind, nameOrMetres) {
+  return kind === 'row' ? `row-${nameOrMetres}` : 'lift-' + String(nameOrMetres).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
 function load() {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { console.warn('Could not read saved data', e); }
   if (!data) {
     data = { exercises: [], sets: [] };
     for (const [category, names] of Object.entries(STARTER_LIFTS)) {
-      for (const name of names) data.exercises.push({ id: uid(), kind: 'lift', name, category });
+      for (const name of names) data.exercises.push({ id: starterId('lift', name), kind: 'lift', name, category, updatedAt: 0 });
     }
   }
-  // Upgrade older saves: give everything a kind, and add the rowing distances if missing.
+  // ---- Upgrades for saves made by older versions (never wipe, always carry forward) ----
   for (const e of data.exercises) if (!e.kind) e.kind = 'lift';
   if (!data.exercises.some(e => e.kind === 'row')) {
-    for (const metres of STARTER_ROWS) data.exercises.push({ id: uid(), kind: 'row', name: rowName(metres), category: 'Rowing', metres });
+    for (const metres of STARTER_ROWS) data.exercises.push({ id: starterId('row', metres), kind: 'row', name: rowName(metres), category: 'Rowing', metres, updatedAt: 0 });
   }
+  // Starters saved with random ids → move them to their fixed ids (and point their sets at the new id)
+  const starterNames = new Set(Object.values(STARTER_LIFTS).flat().map(n => n.toLowerCase()));
+  for (const e of data.exercises) {
+    const fixed = e.kind === 'row' ? starterId('row', e.metres) : (starterNames.has(e.name.toLowerCase()) ? starterId('lift', e.name) : null);
+    if (fixed && e.id !== fixed) {
+      for (const s of data.sets) if (s.exerciseId === e.id) s.exerciseId = fixed;
+      e.id = fixed;
+    }
+  }
+  // Every record carries updatedAt so sync can tell which copy is newer
+  for (const e of data.exercises) if (e.updatedAt === undefined) e.updatedAt = 0;
+  for (const s of data.sets) if (s.updatedAt === undefined) s.updatedAt = s.at || 0;
+  if (!data.tombstones) data.tombstones = [];   // things deleted here, remembered so the cloud copy gets deleted too
   return data;
 }
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 }
+
+/* ---- Cloud hooks: app.js never talks to Firebase directly, only via window.cloud (sync.js) ---- */
+function cloudUpsert(name, item) { item.updatedAt = Date.now(); if (window.cloud) window.cloud.upsert(name, item); }
+function cloudDelete(name, id) {
+  const tomb = { id, deleted: true, updatedAt: Date.now() };
+  db.tombstones.push({ name, ...tomb });
+  if (db.tombstones.length > 500) db.tombstones.splice(0, db.tombstones.length - 500);
+  if (window.cloud) window.cloud.upsert(name, tomb);
+}
+// sync.js asks for everything local when you sign in (including tombstones, so offline deletes stick)
+window.cloudLocal = () => ({
+  exercises: [...db.exercises, ...db.tombstones.filter(t => t.name === 'exercises').map(({ name, ...t }) => t)],
+  sets:      [...db.sets,      ...db.tombstones.filter(t => t.name === 'sets').map(({ name, ...t }) => t)],
+});
+// sync.js hands us records from the cloud; newer copy wins, deleted-newer removes.
+window.cloudMerge = (name, items) => {
+  const list = db[name];
+  let changed = false;
+  for (const item of items) {
+    const i = list.findIndex(x => x.id === item.id);
+    const local = list[i];
+    const localAt = local ? (local.updatedAt || 0) : -1;
+    if ((item.updatedAt || 0) < localAt) continue;                 // ours is newer, keep it
+    if (item.deleted) { if (local) { list.splice(i, 1); changed = true; } continue; }
+    if (local && (item.updatedAt || 0) === localAt) continue;      // same copy already
+    if (local) list[i] = item; else list.push(item);
+    changed = true;
+  }
+  if (changed) { save(); rerender(); }
+};
+window.cloudStatus = (state, email) => {
+  const dot = $('#cloud-dot');
+  dot.className = 'dot ' + (state === 'synced' ? 'synced' : state === 'saving' || state === 'syncing' ? 'saving' : state === 'error' ? 'error' : '');
+  dot.title = state;
+  cloudState = { state, email: email || (window.cloud && window.cloud.user && window.cloud.user.email) || '' };
+  if (!$('#screen-settings').classList.contains('hidden')) renderAccount();
+};
+let cloudState = { state: 'loading', email: '' };
 
 /* ---------- 2. Helpers ---------- */
 
@@ -127,7 +184,8 @@ function openSheet({ title, text = '', fields = [], actions = [] }) {
     const label = document.createElement('label'); label.textContent = f.label; label.htmlFor = 'sheet-' + f.id;
     const input = document.createElement('input');
     input.id = 'sheet-' + f.id; input.type = f.type || 'text'; input.value = f.value || ''; input.placeholder = f.placeholder || '';
-    input.autocomplete = 'off'; input.autocapitalize = f.type === 'number' ? 'off' : 'sentences';
+    input.autocomplete = f.type === 'email' ? 'email' : f.type === 'password' ? 'current-password' : 'off';
+    input.autocapitalize = ['number', 'email', 'password'].includes(f.type) ? 'off' : 'sentences';
     if (f.type === 'number') input.inputMode = 'numeric';
     wrap.append(label, input); fieldsEl.appendChild(wrap);
   }
@@ -137,11 +195,14 @@ function openSheet({ title, text = '', fields = [], actions = [] }) {
     const b = document.createElement('button');
     b.className = a.kind === 'primary' ? 'primary' : a.kind === 'danger' ? 'primary danger' : 'secondary';
     b.textContent = a.label;
-    b.onclick = () => {
+    b.onclick = async () => {
       const values = {};
       for (const f of fields) values[f.id] = $('#sheet-' + f.id).value.trim();
-      if (a.onClick && a.onClick(values) === false) return;   // return false from onClick to keep the sheet open
-      closeSheet();
+      b.disabled = true;
+      try {
+        if (a.onClick && (await a.onClick(values)) === false) return;   // return false from onClick to keep the sheet open
+        closeSheet();
+      } finally { b.disabled = false; }
     };
     row.appendChild(b);
   }
@@ -230,8 +291,8 @@ function addExercise() {
         if (!metres || metres <= 0) { toast('Enter a distance in metres'); return false; }
         const existing = db.exercises.find(e => e.kind === 'row' && e.metres === metres);
         if (existing) { location.hash = `ex/${existing.id}`; return; }
-        const ex = { id: uid(), kind: 'row', name: rowName(metres), category: 'Rowing', metres };
-        db.exercises.push(ex); save();
+        const ex = { id: starterId('row', metres), kind: 'row', name: rowName(metres), category: 'Rowing', metres };
+        cloudUpsert('exercises', ex); db.exercises.push(ex); save();
         location.hash = `ex/${ex.id}`;
       } }],
     });
@@ -251,7 +312,7 @@ function addExercise() {
       const cat = v.category || 'Other';
       const known = [...Object.keys(STARTER_LIFTS), ...db.exercises.map(e => e.category)].find(c => c.toLowerCase() === cat.toLowerCase());
       const ex = { id: uid(), kind: 'lift', name: v.name, category: known || cat };
-      db.exercises.push(ex); save();
+      cloudUpsert('exercises', ex); db.exercises.push(ex); save();
       location.hash = `ex/${ex.id}`;
     } }],
   });
@@ -365,7 +426,7 @@ function saveSet(force = false) {   // force = true: user tapped "Save anyway" o
   }
 
   const before = bestSet(ex, setsFor(currentId));
-  db.sets.push(set); save();
+  cloudUpsert('sets', set); db.sets.push(set); save();
 
   toast(better(ex, set, before) ? '🏆 New personal best!' : 'Saved');
   if (navigator.vibrate) navigator.vibrate(10);
@@ -380,7 +441,7 @@ function deleteSet(id, btn) {
     setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '✕'; }, 3000);
     return;
   }
-  db.sets = db.sets.filter(s => s.id !== id); save();
+  db.sets = db.sets.filter(s => s.id !== id); cloudDelete('sets', id); save();
   renderHistory();
   toast('Deleted');
 }
@@ -409,7 +470,7 @@ function exerciseMenu() {
   if (ex.kind === 'lift') {
     actions.push({ label: 'Rename', kind: 'primary', onClick: (v) => {
       if (!v.name) { toast('Give it a name'); return false; }
-      ex.name = v.name; save(); $('#exercise-title').textContent = v.name;
+      ex.name = v.name; cloudUpsert('exercises', ex); save(); $('#exercise-title').textContent = v.name;
     } });
   }
   actions.push({ label: n ? `Delete with ${n} entr${n === 1 ? 'y' : 'ies'}` : 'Delete', kind: 'danger', onClick: () => {
@@ -418,6 +479,8 @@ function exerciseMenu() {
       title: `Delete ${ex.name}?`,
       text: n ? `Its ${n} logged entr${n === 1 ? 'y' : 'ies'} will be gone for good.` : 'This can\'t be undone.',
       actions: [{ label: 'Yes, delete', kind: 'danger', onClick: () => {
+        for (const s of db.sets) if (s.exerciseId === ex.id) cloudDelete('sets', s.id);
+        cloudDelete('exercises', ex.id);
         db.exercises = db.exercises.filter(e => e.id !== ex.id);
         db.sets = db.sets.filter(s => s.exerciseId !== ex.id);
         save(); location.hash = ''; toast('Deleted');
@@ -456,7 +519,15 @@ function importBackup(file) {
       openSheet({
         title: 'Restore backup?',
         text: `Replaces everything on this phone with ${data.exercises.length} exercises and ${data.sets.length} entries from the file.`,
-        actions: [{ label: 'Restore', kind: 'danger', onClick: () => { db = data; save(); renderStats(); toast('Backup restored'); } }],
+        actions: [{ label: 'Restore', kind: 'danger', onClick: () => {
+          // Run the file through load() so old backups get the same upgrades as old saves
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); db = load();
+          const now = Date.now();
+          for (const e of db.exercises) e.updatedAt = now;
+          for (const s of db.sets) s.updatedAt = now;
+          save(); renderStats(); toast('Backup restored');
+          if (window.cloud) { window.cloud.upsertMany('exercises', db.exercises); window.cloud.upsertMany('sets', db.sets); }
+        } }],
       });
     } catch (e) { toast('That file is not a valid backup'); }
   };
@@ -467,6 +538,53 @@ function renderStats() {
   $('#stats').textContent = `${db.exercises.length} exercises · ${db.sets.length} entries logged`;
 }
 
+// Re-draw whatever screen is showing (used when cloud changes arrive)
+function rerender() {
+  if (!$('#screen-exercise').classList.contains('hidden')) { if (exercise(currentId)) renderHistory(); else location.hash = ''; }
+  else if (!$('#screen-settings').classList.contains('hidden')) renderStats();
+  else renderList();
+}
+
+// --- Settings: account / cloud sync ---
+function renderAccount() {
+  const { state, email } = cloudState;
+  const signedIn = email && state !== 'signed-out';
+  $('#btn-signin').classList.toggle('hidden', !!signedIn);
+  $('#btn-signout').classList.toggle('hidden', !signedIn);
+  $('#account-text').textContent =
+    state === 'loading' ? 'Connecting…' :
+    !signedIn ? 'Sign in and every set is saved online too — nothing lost if the phone is.' :
+    state === 'syncing' ? `Signed in as ${email} · syncing…` :
+    state === 'saving' ? `Signed in as ${email} · saving…` :
+    state === 'error' ? `Signed in as ${email} · sync problem (will retry)` :
+    `Signed in as ${email} · everything synced ✓`;
+}
+
+function signInSheet() {
+  if (!window.cloud) { toast('No connection — try again with signal'); return; }
+  const fields = [
+    { id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', value: localStorage.getItem('oscargym.email') || '' },
+    { id: 'password', label: 'Password', type: 'password', placeholder: 'At least 6 characters' },
+  ];
+  const go = (fn) => async (v) => {
+    if (!v.email) { toast('Enter your email'); return false; }
+    localStorage.setItem('oscargym.email', v.email);
+    const err = await fn(v);
+    if (err) { toast(err); return false; }   // stay open so they can fix it
+  };
+  openSheet({
+    title: 'Cloud sync',
+    text: 'One account, any phone. Your sets upload automatically.',
+    fields,
+    actions: [
+      { label: 'Sign in', kind: 'primary', onClick: go(v => window.cloud.signIn(v.email, v.password)) },
+      { label: 'Create account', kind: 'secondary', onClick: go(v => window.cloud.createAccount(v.email, v.password)) },
+      { label: 'Forgot password', kind: 'secondary', onClick: go(async v => { const e = await window.cloud.resetPassword(v.email); if (!e) toast('Reset email sent'); return e; }) },
+      { label: 'Cancel', kind: 'secondary' },
+    ],
+  });
+}
+
 /* ---------- 4. Wiring ---------- */
 
 // Navigation is driven by the URL hash so the iPhone swipe-back gesture works:
@@ -474,7 +592,7 @@ function renderStats() {
 function route() {
   const h = location.hash.slice(1);
   if (h.startsWith('ex/')) openExercise(h.slice(3));
-  else if (h === 'settings') { renderStats(); show('#screen-settings'); }
+  else if (h === 'settings') { renderStats(); renderAccount(); show('#screen-settings'); }
   else { stopRest(); currentId = null; setTab(tab); show('#screen-list'); }
 }
 window.addEventListener('hashchange', route);
@@ -488,6 +606,12 @@ $('#btn-back').onclick = () => history.back();
 $('#btn-exercise-menu').onclick = exerciseMenu;
 $('#btn-save-set').onclick = () => saveSet();   // not `= saveSet` — that would pass the click event as `force`
 $('#btn-export').onclick = exportBackup;
+$('#btn-signin').onclick = signInSheet;
+$('#btn-signout').onclick = () => openSheet({
+  title: 'Sign out?',
+  text: 'Your sets stay on this phone and in the cloud. Sign back in any time.',
+  actions: [{ label: 'Sign out', kind: 'danger', onClick: () => { window.cloud.signOut(); } }],
+});
 $('#import-file').onchange = (e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ''; };
 
 // +/− steppers on every number box

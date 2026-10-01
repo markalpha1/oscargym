@@ -11,7 +11,8 @@ Built as a web app (HTML/CSS/JS, no frameworks, no build step) so it runs anywhe
 3. **Lifting** tab: tap an exercise → enter weight and reps → **Save set**. Last time's numbers are pre-filled.
 4. **Rowing** tab: tap a distance → enter your time → **Save time**. Shows your /500m split.
 5. Your best gets a **PB** badge. A rest timer starts counting after every save.
-6. ⚙ Settings → **Export backup** now and then. Data lives on your phone only.
+6. ⚙ Settings → **Sign in** (email + password) and every set is saved to the cloud too. Works offline; catches up when you have signal. Same account on a new phone = all your history back.
+7. **Export backup** is still there as a belt-and-braces file copy.
 
 ## Project files
 
@@ -20,6 +21,8 @@ Built as a web app (HTML/CSS/JS, no frameworks, no build step) so it runs anywhe
 | `index.html` | The screens (list, exercise, settings) |
 | `style.css` | Looks. Colours are variables at the top |
 | `app.js` | All the logic, commented top to bottom |
+| `sync.js` | Cloud sync + sign-in (Firebase). The app works without it |
+| `firestore.rules` | Who can read/write what in the cloud — paste into the Firebase console |
 | `sw.js` | Offline support (service worker). **Bump `CACHE` when you change files** |
 | `manifest.webmanifest` | Home-screen app name and icon |
 | `icons/` | App icon |
@@ -37,6 +40,8 @@ then open http://localhost:8000. (Service workers need `localhost` or `https`, n
 ## Roadmap
 
 - [x] v1 — exercise list, history, log sets; rowing tab with times
+- [x] v1.5 — cloud sync + accounts (Firebase), so nothing is lost and friends get their own data
 - [ ] v2 — progress charts, streak calendar
 - [ ] v3 — exercise library (how to do each move)
-- [ ] v4 — accounts, so friends get their own data
+
+Live at https://markalpha1.github.io/oscargym/ (GitHub Pages, from `main`).

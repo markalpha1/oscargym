@@ -24,7 +24,7 @@
   <section id="screen-list" class="screen">
     <header class="topbar">
       <h1>Gym</h1>
-      <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙</button>
+      <button id="btn-settings" class="icon-btn" aria-label="Settings"><span id="cloud-dot" class="dot" title="Not synced"></span>⚙</button>
     </header>
 
     <nav class="tabs" role="tablist">
@@ -105,7 +105,12 @@
       <span class="icon-btn"></span>
     </header>
     <div class="settings">
-      <p class="muted">Your data lives on this phone only. Back it up now and then.</p>
+      <h3>Cloud sync</h3>
+      <p id="account-text" class="muted">Sign in and every set is saved online too — nothing lost if the phone is.</p>
+      <button id="btn-signin" class="primary">Sign in</button>
+      <button id="btn-signout" class="secondary hidden">Sign out</button>
+
+      <h3>Backup file</h3>
       <button id="btn-export" class="secondary">Export backup</button>
       <label class="secondary file-btn">Import backup<input id="import-file" type="file" accept="application/json" hidden></label>
       <p id="stats" class="muted"></p>
@@ -125,5 +130,7 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
+  <!-- Cloud sync loads after the app, so the app works even if this fails (no signal, etc.) -->
+  <script type="module" src="sync.js"></script>
 </body>
 </html>

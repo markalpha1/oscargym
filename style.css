@@ -123,6 +123,16 @@ button { cursor: pointer; border: 0; background: none; }
 
 /* ---- Settings ---- */
 .settings { padding: 8px 16px; }
+.settings h3 { margin: 22px 0 8px 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.settings h3:first-child { margin-top: 4px; }
+.settings .primary { width: 100%; margin-bottom: 10px; }
+
+/* Cloud status dot next to the ⚙: grey = signed out, amber = saving, green = synced, red = problem */
+.dot { position: absolute; top: 10px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); opacity: 0.5; }
+.dot.saving { background: #fbbf24; opacity: 1; }
+.dot.synced { background: var(--accent); opacity: 1; }
+.dot.error  { background: var(--danger); opacity: 1; }
+#btn-settings { position: relative; }
 .file-btn { cursor: pointer; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
