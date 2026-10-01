@@ -127,6 +127,30 @@ button { cursor: pointer; border: 0; background: none; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 
+/* Two-tap delete: first tap arms it ("Delete?"), second tap deletes */
+.set .del.armed { width: auto; padding: 0 12px; color: var(--danger); font-size: 14px; font-weight: 600; }
+
+/* ---- Slide-up panel ---- */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 5; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  animation: slideup 0.2s ease-out;
+}
+@keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet h2 { margin: 0 0 4px; font-size: 20px; }
+.sheet p { margin: 0 0 12px; }
+.sheet p:empty { display: none; }
+.sheet .field { margin-bottom: 12px; }
+.sheet input {
+  width: 100%; height: 50px; border-radius: 12px; border: 0; padding: 0 14px; font-size: 17px;
+  background: var(--bg); color: var(--text); outline: none; -webkit-appearance: none;
+}
+.sheet .actions-row { display: grid; gap: 8px; margin-top: 8px; }
+.sheet .danger { background: var(--danger); color: #450a0a; }
+.sheet .secondary { margin-bottom: 0; background: var(--surface-2); }
+
 /* ---- Toast ---- */
 .toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);

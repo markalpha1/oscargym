@@ -10,7 +10,7 @@
      row  — a time over a distance (500 m, 2,000 m…)
 */
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const STORAGE_KEY = 'oscargym.v1';
 
 /* ---------- 1. Data ---------- */
@@ -115,6 +115,50 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.add('hidden'), 1600);
 }
 
+// Slide-up panel. Replaces the browser's ugly prompt()/confirm() pop-ups.
+//   openSheet({ title, text, fields: [{ id, label, value, placeholder, type }],
+//               actions: [{ label, kind: 'primary'|'danger'|'secondary', onClick(values) }] })
+function openSheet({ title, text = '', fields = [], actions = [] }) {
+  $('#sheet-title').textContent = title;
+  $('#sheet-text').textContent = text;
+  const fieldsEl = $('#sheet-fields'); fieldsEl.innerHTML = '';
+  for (const f of fields) {
+    const wrap = document.createElement('div'); wrap.className = 'field';
+    const label = document.createElement('label'); label.textContent = f.label; label.htmlFor = 'sheet-' + f.id;
+    const input = document.createElement('input');
+    input.id = 'sheet-' + f.id; input.type = f.type || 'text'; input.value = f.value || ''; input.placeholder = f.placeholder || '';
+    input.autocomplete = 'off'; input.autocapitalize = f.type === 'number' ? 'off' : 'sentences';
+    if (f.type === 'number') input.inputMode = 'numeric';
+    wrap.append(label, input); fieldsEl.appendChild(wrap);
+  }
+  const actionsEl = $('#sheet-actions'); actionsEl.innerHTML = '';
+  const row = document.createElement('div'); row.className = 'actions-row';
+  for (const a of actions) {
+    const b = document.createElement('button');
+    b.className = a.kind === 'primary' ? 'primary' : a.kind === 'danger' ? 'primary danger' : 'secondary';
+    b.textContent = a.label;
+    b.onclick = () => {
+      const values = {};
+      for (const f of fields) values[f.id] = $('#sheet-' + f.id).value.trim();
+      if (a.onClick && a.onClick(values) === false) return;   // return false from onClick to keep the sheet open
+      closeSheet();
+    };
+    row.appendChild(b);
+  }
+  // Every sheet gets a Cancel unless an action already closes it harmlessly
+  if (!actions.some(a => a.kind === 'secondary')) {
+    const c = document.createElement('button'); c.className = 'secondary'; c.textContent = 'Cancel'; c.onclick = closeSheet; row.appendChild(c);
+  }
+  actionsEl.appendChild(row);
+  $('#backdrop').classList.remove('hidden'); $('#sheet').classList.remove('hidden');
+  const first = fieldsEl.querySelector('input'); if (first) setTimeout(() => first.focus(), 50);
+  // Enter in the last box = press the first (primary) button
+  const inputs = fieldsEl.querySelectorAll('input');
+  if (inputs.length) inputs[inputs.length - 1].addEventListener('keydown', (e) => { if (e.key === 'Enter') row.querySelector('button').click(); });
+}
+function closeSheet() { $('#backdrop').classList.add('hidden'); $('#sheet').classList.add('hidden'); }
+$('#backdrop').onclick = closeSheet;
+
 function show(screenId) {
   for (const s of document.querySelectorAll('.screen')) s.classList.add('hidden');
   $(screenId).classList.remove('hidden');
@@ -178,23 +222,39 @@ function renderList() {
 
 function addExercise() {
   if (tab === 'row') {
-    const metres = parseInt(prompt('Distance in metres (e.g. 1500):') || '', 10);
-    if (!metres || metres <= 0) return;
-    const existing = db.exercises.find(e => e.kind === 'row' && e.metres === metres);
-    if (existing) { location.hash = `ex/${existing.id}`; return; }
-    const ex = { id: uid(), kind: 'row', name: rowName(metres), category: 'Rowing', metres };
-    db.exercises.push(ex); save();
-    location.hash = `ex/${ex.id}`;
+    openSheet({
+      title: 'Add a distance',
+      fields: [{ id: 'metres', label: 'Metres', type: 'number', placeholder: 'e.g. 1500' }],
+      actions: [{ label: 'Add', kind: 'primary', onClick: (v) => {
+        const metres = parseInt(v.metres, 10);
+        if (!metres || metres <= 0) { toast('Enter a distance in metres'); return false; }
+        const existing = db.exercises.find(e => e.kind === 'row' && e.metres === metres);
+        if (existing) { location.hash = `ex/${existing.id}`; return; }
+        const ex = { id: uid(), kind: 'row', name: rowName(metres), category: 'Rowing', metres };
+        db.exercises.push(ex); save();
+        location.hash = `ex/${ex.id}`;
+      } }],
+    });
     return;
   }
-  const name = (prompt('Exercise or machine name:') || '').trim();
-  if (!name) return;
-  const existing = db.exercises.find(e => e.kind === 'lift' && e.name.toLowerCase() === name.toLowerCase());
-  if (existing) { location.hash = `ex/${existing.id}`; return; }
-  const category = (prompt('Category (Chest, Back, Shoulders, Arms, Legs, Core… or your own):', 'Other') || 'Other').trim() || 'Other';
-  const ex = { id: uid(), kind: 'lift', name, category };
-  db.exercises.push(ex); save();
-  location.hash = `ex/${ex.id}`;
+  openSheet({
+    title: 'Add an exercise',
+    fields: [
+      { id: 'name', label: 'Exercise or machine', placeholder: 'e.g. Chest press machine', value: $('#search').value.trim() },
+      { id: 'category', label: 'Body part', placeholder: 'Chest, Back, Shoulders, Arms, Legs, Core…' },
+    ],
+    actions: [{ label: 'Add', kind: 'primary', onClick: (v) => {
+      if (!v.name) { toast('Give it a name'); return false; }
+      const existing = db.exercises.find(e => e.kind === 'lift' && e.name.toLowerCase() === v.name.toLowerCase());
+      if (existing) { location.hash = `ex/${existing.id}`; return; }
+      // Match the capitalisation of an existing category ("legs" → "Legs")
+      const cat = v.category || 'Other';
+      const known = [...Object.keys(STARTER_LIFTS), ...db.exercises.map(e => e.category)].find(c => c.toLowerCase() === cat.toLowerCase());
+      const ex = { id: uid(), kind: 'lift', name: v.name, category: known || cat };
+      db.exercises.push(ex); save();
+      location.hash = `ex/${ex.id}`;
+    } }],
+  });
 }
 
 // --- One exercise ---
@@ -265,7 +325,7 @@ function renderHistory() {
         label = `${fmtWeight(s.weight)} kg × ${s.reps}`;
       }
       row.innerHTML = `<span>${label}${s.id === pb.id ? '<span class="pb">PB</span>' : ''}</span><button class="del" aria-label="Delete">✕</button>`;
-      row.querySelector('.del').onclick = () => deleteSet(s.id);
+      row.querySelector('.del').onclick = (ev) => deleteSet(s.id, ev.currentTarget);
       day.appendChild(row);
     }
     container.appendChild(day);
@@ -298,10 +358,16 @@ function saveSet() {
   startRest();
 }
 
-function deleteSet(id) {
-  if (!confirm('Delete this entry?')) return;
+// Two taps to delete: first tap turns ✕ into "Delete?", second tap (within 3 s) deletes.
+function deleteSet(id, btn) {
+  if (!btn.classList.contains('armed')) {
+    btn.classList.add('armed'); btn.textContent = 'Delete?';
+    setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '✕'; }, 3000);
+    return;
+  }
   db.sets = db.sets.filter(s => s.id !== id); save();
   renderHistory();
+  toast('Deleted');
 }
 
 // Rest timer: counts up from the moment you saved, so you know how long you've been resting.
@@ -320,20 +386,35 @@ function stopRest() {
   $('#rest-time').textContent = '0:00';
 }
 
+// The "⋯" menu on an exercise: rename, or delete it with all its history.
 function exerciseMenu() {
   const ex = exercise(currentId);
-  const choice = (prompt(`"${ex.name}"\n\nType:  rename  or  delete`, '') || '').trim().toLowerCase();
-  if (choice === 'rename' && ex.kind === 'lift') {
-    const name = (prompt('New name:', ex.name) || '').trim();
-    if (name) { ex.name = name; save(); $('#exercise-title').textContent = name; }
-  } else if (choice === 'delete') {
-    const n = setsFor(ex.id).length;
-    if (confirm(`Delete "${ex.name}"${n ? ` and its ${n} logged entr${n === 1 ? 'y' : 'ies'}` : ''}? This can't be undone.`)) {
-      db.exercises = db.exercises.filter(e => e.id !== ex.id);
-      db.sets = db.sets.filter(s => s.exerciseId !== ex.id);
-      save(); location.hash = '';
-    }
+  const n = setsFor(ex.id).length;
+  const actions = [];
+  if (ex.kind === 'lift') {
+    actions.push({ label: 'Rename', kind: 'primary', onClick: (v) => {
+      if (!v.name) { toast('Give it a name'); return false; }
+      ex.name = v.name; save(); $('#exercise-title').textContent = v.name;
+    } });
   }
+  actions.push({ label: n ? `Delete with ${n} entr${n === 1 ? 'y' : 'ies'}` : 'Delete', kind: 'danger', onClick: () => {
+    // Ask once more — this is the one thing in the app that can't be undone.
+    openSheet({
+      title: `Delete ${ex.name}?`,
+      text: n ? `Its ${n} logged entr${n === 1 ? 'y' : 'ies'} will be gone for good.` : 'This can\'t be undone.',
+      actions: [{ label: 'Yes, delete', kind: 'danger', onClick: () => {
+        db.exercises = db.exercises.filter(e => e.id !== ex.id);
+        db.sets = db.sets.filter(s => s.exerciseId !== ex.id);
+        save(); location.hash = ''; toast('Deleted');
+      } }],
+    });
+    return false;   // keep the second sheet open (it replaced the first)
+  } });
+  openSheet({
+    title: ex.name,
+    fields: ex.kind === 'lift' ? [{ id: 'name', label: 'Name', value: ex.name }] : [],
+    actions,
+  });
 }
 
 // --- Settings: backup & restore ---
@@ -357,9 +438,12 @@ function importBackup(file) {
     try {
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data.exercises) || !Array.isArray(data.sets)) throw new Error('Not a gym backup');
-      if (!confirm(`Replace everything on this phone with the backup?\n(${data.exercises.length} exercises, ${data.sets.length} entries)`)) return;
-      db = data; save(); renderStats(); toast('Backup restored');
-    } catch (e) { alert('That file is not a valid backup.'); }
+      openSheet({
+        title: 'Restore backup?',
+        text: `Replaces everything on this phone with ${data.exercises.length} exercises and ${data.sets.length} entries from the file.`,
+        actions: [{ label: 'Restore', kind: 'danger', onClick: () => { db = data; save(); renderStats(); toast('Backup restored'); } }],
+      });
+    } catch (e) { toast('That file is not a valid backup'); }
   };
   reader.readAsText(file);
 }
