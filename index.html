@@ -5,7 +5,7 @@
   <title>Oscar Gym</title>
   <!-- viewport-fit=cover lets the app paint behind the iPhone notch / home bar -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#0f0f10">
+  <meta name="theme-color" content="#000000">
   <meta name="description" content="A minimal gym log: pick an exercise, see your history, record your sets.">
 
   <!-- Makes "Add to Home Screen" on iPhone open the app full-screen, no Safari bars -->
@@ -46,6 +46,8 @@
     <header class="topbar">
       <button id="btn-back" class="icon-btn" aria-label="Back">‹</button>
       <h1 id="exercise-title">Exercise</h1>
+      <!-- ☆ = tap to favourite. Favourites get their own section at the top of the list. -->
+      <button id="btn-fav" class="icon-btn star" aria-label="Favourite">☆</button>
       <button id="btn-exercise-menu" class="icon-btn" aria-label="More">⋯</button>
     </header>
 
@@ -94,6 +96,9 @@
       <div id="rest-timer" class="rest hidden">Rest <span id="rest-time">0:00</span></div>
     </div>
 
+    <!-- Progress graph: your best each session, drawn as a line (see renderChart in app.js) -->
+    <div id="chart" class="chart hidden"></div>
+
     <div id="history" class="history"></div>
   </section>
 
@@ -102,7 +107,6 @@
     <header class="topbar">
       <button id="btn-settings-back" class="icon-btn" aria-label="Back">‹</button>
       <h1>Settings</h1>
-      <span class="icon-btn"></span>
     </header>
     <div class="settings">
       <h3>Cloud sync</h3>

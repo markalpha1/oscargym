@@ -12,6 +12,11 @@ A minimal, dark, iPhone-first web app (PWA). Two tabs at the top:
 - **Rowing** — distances → tap → history + log a time (shows /500 m split).
 PB badge, rest timer, sanity check on wild numbers, slide-up panel (`openSheet`) instead of
 browser dialogs, backup export/import, **cloud sync + accounts via Firebase** (`sync.js`).
+v0.6 (Oscar's own asks): ☆ favourites (`fav` flag on the exercise, Favourites group at the top
+of the list with a mini graph), progress graph per exercise (`progressPoints` + `chartSVG`,
+inline SVG, no library; rowing is flipped so faster = higher), black & white "liquid glass"
+theme (one `.glass` recipe in style.css; plain list rows skip `backdrop-filter` for speed),
+slide animations between tabs/pages and a swipe gesture to change tab.
 
 ## Rules
 
@@ -55,5 +60,9 @@ JavaScript (set input values, click buttons, read `localStorage`).
 
 ## Roadmap (agreed with Oscar, 2026-10-01)
 
-v1 list+log+rowing ✓ → v1.5 cloud sync/accounts ✓ → v2 charts & streaks → v3 exercise
-library. Oscar's own asks so far: minimal dark look, rowing tab with times by distance.
+v1 list+log+rowing ✓ → v1.5 cloud sync/accounts ✓ → v2 favourites, graphs, glass look,
+animations ✓ (2026-10-04) → v2.5 streak calendar → v3 exercise library. Oscar's own asks so
+far: minimal dark look, rowing tab, favourites section, graphs, liquid-glass B&W, page swipes.
+Testing in the cloud: Playwright + the bundled Chromium work headless (see git history for the
+test script pattern: serve with `python3 -m http.server`, seed `db` via `save()`, screenshot at
+375 px).

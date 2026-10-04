@@ -10,7 +10,7 @@
      row  — a time over a distance (500 m, 2,000 m…)
 */
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const STORAGE_KEY = 'oscargym.v1';
 
 /* ---------- 1. Data ---------- */
@@ -27,7 +27,7 @@ const STARTER_LIFTS = {
 const STARTER_ROWS = [500, 1000, 2000, 5000];   // metres
 
 // The whole app's data lives in this one object, saved to the phone as JSON.
-//   exercises: [{ id, kind:'lift'|'row', name, category, metres? }]
+//   exercises: [{ id, kind:'lift'|'row', name, category, metres?, fav? }]   (fav = true when starred)
 //   sets:      [{ id, exerciseId, at, weight?, reps?, seconds? }]   (at = timestamp in ms)
 let db = load();
 
@@ -164,6 +164,50 @@ function better(ex, a, b) {
 }
 function bestSet(ex, sets) { return sets.reduce((best, s) => better(ex, s, best) ? s : best, null); }
 
+// Your best from each day you trained, oldest first — the points on the progress graph.
+//   lift → heaviest weight that day;  row → fastest time that day
+//   returns [{ at, value, set }]
+function progressPoints(ex, sets) {
+  const byDay = new Map();
+  for (const s of sets) {
+    const k = dayKey(s.at);
+    if (!byDay.has(k) || better(ex, s, byDay.get(k))) byDay.set(k, s);
+  }
+  return [...byDay.values()]
+    .sort((a, b) => a.at - b.at)
+    .map(s => ({ at: s.at, value: ex.kind === 'row' ? s.seconds : s.weight, set: s }));
+}
+
+// Draws a line graph as inline SVG (no libraries — it's just a few lines of maths).
+//   points: from progressPoints;  opts: { width, height, labels: true/false }
+// For rowing the graph is flipped so that FASTER is HIGHER — "up" always means "better".
+function chartSVG(ex, points, { width = 340, height = 120, labels = false } = {}) {
+  const pad = { top: 10, right: 12, bottom: labels ? 22 : 6, left: 12 };
+  const w = width - pad.left - pad.right, h = height - pad.top - pad.bottom;
+  const vals = points.map(p => p.value);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo -= 1; hi += 1; }   // a flat line still needs some room
+  const up = ex.kind === 'row';          // row: smaller value sits higher
+  const x = (i) => pad.left + (points.length === 1 ? w / 2 : i / (points.length - 1) * w);
+  const y = (v) => pad.top + (up ? (v - lo) / (hi - lo) : (hi - v) / (hi - lo)) * h;
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const area = `${d} L${x(points.length - 1).toFixed(1)},${(pad.top + h).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + h).toFixed(1)} Z`;
+  const best = bestSet(ex, points.map(p => p.set));
+  let svg = `<svg viewBox="0 0 ${width} ${height}" class="graph" aria-hidden="true">`;
+  svg += `<path class="graph-area" d="${area}"/>`;
+  svg += `<path class="graph-line" d="${d}"/>`;
+  points.forEach((p, i) => {
+    svg += `<circle class="graph-dot${p.set.id === best.id ? ' best' : ''}" data-i="${i}" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${labels ? 4 : 2.5}"/>`;
+  });
+  if (labels) {
+    // Just the two ends on the date axis — enough to read the span without clutter
+    const fmt = (ts) => new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    svg += `<text class="graph-label" x="${pad.left}" y="${height - 6}">${fmt(points[0].at)}</text>`;
+    if (points.length > 1) svg += `<text class="graph-label" x="${width - pad.right}" y="${height - 6}" text-anchor="end">${fmt(points[points.length - 1].at)}</text>`;
+  }
+  return svg + '</svg>';
+}
+
 let toastTimer;
 function toast(msg) {
   const el = $('#toast');
@@ -220,23 +264,55 @@ function openSheet({ title, text = '', fields = [], actions = [] }) {
 function closeSheet() { $('#backdrop').classList.add('hidden'); $('#sheet').classList.add('hidden'); }
 $('#backdrop').onclick = closeSheet;
 
-function show(screenId) {
-  for (const s of document.querySelectorAll('.screen')) s.classList.add('hidden');
-  $(screenId).classList.remove('hidden');
-  window.scrollTo(0, 0);
+// Swap screens. direction: 'push' = new page slides in from the right (going deeper),
+// 'pop' = coming back, the page settles in from the left; nothing = no animation (first load).
+function show(screenId, direction) {
+  const next = $(screenId);
+  if (next.classList.contains('hidden') || direction) {
+    for (const s of document.querySelectorAll('.screen')) { s.classList.add('hidden'); s.classList.remove('anim-push', 'anim-pop'); }
+    next.classList.remove('hidden');
+    if (direction) next.classList.add(direction === 'push' ? 'anim-push' : 'anim-pop');
+  }
+  next.scrollTop = 0;
 }
 
 /* ---------- 3. Screens ---------- */
 
 // --- List (Lifting / Rowing tab) ---
 let tab = localStorage.getItem('oscargym.tab') || 'lift';
+const TAB_ORDER = ['lift', 'row'];   // left → right, decides which way the list slides
 
 function setTab(next) {
+  const from = TAB_ORDER.indexOf(tab), to = TAB_ORDER.indexOf(next);
   tab = next; localStorage.setItem('oscargym.tab', tab);
   for (const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab === tab);
   $('#search').placeholder = tab === 'row' ? 'Search distances…' : 'Search exercises…';
   renderList();
+  // Slide the list in from the side the new tab is on (Lifting → Rowing slides in from the right)
+  if (from !== to) {
+    const list = $('#exercise-list');
+    list.classList.remove('slide-from-right', 'slide-from-left');
+    void list.offsetWidth;   // forces the browser to notice the class was removed, so the animation restarts
+    list.classList.add(to > from ? 'slide-from-right' : 'slide-from-left');
+  }
 }
+
+// Swipe left/right on the list to change tab (like flicking between pages).
+// Ignores swipes that start at the very left edge — that's the iPhone's own "go back" gesture.
+let swipe = null;
+$('#screen-list').addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  swipe = t.clientX > 24 ? { x: t.clientX, y: t.clientY } : null;
+}, { passive: true });
+$('#screen-list').addEventListener('touchend', (e) => {
+  if (!swipe) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;   // too short, or mostly a scroll
+  const i = TAB_ORDER.indexOf(tab) + (dx < 0 ? 1 : -1);
+  if (TAB_ORDER[i]) setTab(TAB_ORDER[i]);
+}, { passive: true });
 
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
@@ -247,6 +323,27 @@ function renderList() {
   if (!matching.length) {
     list.innerHTML = `<div class="empty">Nothing matches "${q}".<br>Tap + to add it.</div>`;
     return;
+  }
+
+  // ---- Favourites: starred exercises up top, each with a mini progress graph ----
+  const favs = matching.filter(e => e.fav).sort((a, b) => tab === 'row' ? a.metres - b.metres : a.name.localeCompare(b.name));
+  if (favs.length) {
+    const title = document.createElement('div');
+    title.className = 'group-title'; title.textContent = 'Favourites';
+    list.appendChild(title);
+    for (const e of favs) {
+      const sets = setsFor(e.id);
+      const points = progressPoints(e, sets);
+      const card = document.createElement('button');
+      card.className = 'fav-card';
+      card.innerHTML = `<div class="fav-top"><span class="name"></span><span class="last"></span></div>`;
+      card.querySelector('.name').textContent = e.name;
+      card.querySelector('.last').textContent = sets[0] ? `${fmtSet(e, sets[0])} · ${fmtAgo(sets[0].at)}` : 'Nothing logged yet';
+      if (points.length >= 2) card.insertAdjacentHTML('beforeend', chartSVG(e, points, { width: 340, height: 56 }));
+      else card.insertAdjacentHTML('beforeend', `<div class="fav-hint muted small">${points.length ? 'One more session and a graph appears here' : ''}</div>`);
+      card.onclick = () => { location.hash = `ex/${e.id}`; };
+      list.appendChild(card);
+    }
   }
 
   // Group by category, keeping the starter order; custom categories go last.
@@ -273,7 +370,7 @@ function renderList() {
       const row = document.createElement('button');
       row.className = 'row';
       row.innerHTML = `<span class="name"></span><span class="last"></span>`;
-      row.querySelector('.name').textContent = e.name;
+      row.querySelector('.name').textContent = (e.fav ? '★ ' : '') + e.name;
       row.querySelector('.last').textContent = last ? `${fmtSet(e, last)} · ${fmtAgo(last.at)}` : '';
       row.onclick = () => { location.hash = `ex/${e.id}`; };
       list.appendChild(row);
@@ -322,7 +419,7 @@ function addExercise() {
 let currentId = null;
 let restStart = null, restTimer = null;
 
-function openExercise(id) {
+function openExercise(id, direction) {
   const ex = exercise(id);
   if (!ex) { location.hash = ''; return; }
   currentId = id;
@@ -342,8 +439,51 @@ function openExercise(id) {
     $('#reps').value = last ? last.reps : '';
   }
 
+  renderFavButton();
+  renderChart();
   renderHistory();
-  show('#screen-exercise');
+  show('#screen-exercise', direction);
+}
+
+function renderFavButton() {
+  const ex = exercise(currentId);
+  $('#btn-fav').textContent = ex.fav ? '★' : '☆';
+  $('#btn-fav').classList.toggle('on', !!ex.fav);
+}
+
+function toggleFav() {
+  const ex = exercise(currentId);
+  ex.fav = !ex.fav;
+  cloudUpsert('exercises', ex); save();
+  renderFavButton();
+  if (navigator.vibrate) navigator.vibrate(10);
+  toast(ex.fav ? '★ Added to favourites' : 'Removed from favourites');
+}
+
+// The progress graph above the history. Tap a dot to see that session's number.
+function renderChart() {
+  const ex = exercise(currentId);
+  const points = progressPoints(ex, setsFor(currentId));
+  const el = $('#chart');
+  el.classList.toggle('hidden', points.length < 2);   // needs two sessions to draw a line
+  if (points.length < 2) return;
+  el.innerHTML = chartSVG(ex, points, { width: 340, height: 130, labels: true });
+  const caption = document.createElement('div');
+  caption.className = 'graph-caption';
+  el.appendChild(caption);
+  const describe = (i) => {
+    const p = points[i];
+    caption.innerHTML = `<span>${fmtDay(p.at)}</span><span>${ex.kind === 'row' ? fmtTime(p.value) : fmtWeight(p.value) + ' kg'}${p.set.id === bestSet(ex, points.map(q => q.set)).id ? ' <span class="pb">PB</span>' : ''}</span>`;
+    for (const dot of el.querySelectorAll('.graph-dot')) dot.classList.toggle('picked', +dot.dataset.i === i);
+  };
+  describe(points.length - 1);
+  // Tap anywhere on the graph: pick the nearest dot (dots alone are too small to hit)
+  const svg = el.querySelector('svg');
+  svg.addEventListener('click', (e) => {
+    const box = svg.getBoundingClientRect();
+    const i = Math.round((e.clientX - box.left) / box.width * (points.length - 1));
+    describe(Math.max(0, Math.min(points.length - 1, i)));
+  });
 }
 
 function renderHistory() {
@@ -430,6 +570,7 @@ function saveSet(force = false) {   // force = true: user tapped "Save anyway" o
 
   toast(better(ex, set, before) ? '🏆 New personal best!' : 'Saved');
   if (navigator.vibrate) navigator.vibrate(10);
+  renderChart();
   renderHistory();
   startRest();
 }
@@ -442,6 +583,7 @@ function deleteSet(id, btn) {
     return;
   }
   db.sets = db.sets.filter(s => s.id !== id); cloudDelete('sets', id); save();
+  renderChart();
   renderHistory();
   toast('Deleted');
 }
@@ -540,7 +682,7 @@ function renderStats() {
 
 // Re-draw whatever screen is showing (used when cloud changes arrive)
 function rerender() {
-  if (!$('#screen-exercise').classList.contains('hidden')) { if (exercise(currentId)) renderHistory(); else location.hash = ''; }
+  if (!$('#screen-exercise').classList.contains('hidden')) { if (exercise(currentId)) { renderFavButton(); renderChart(); renderHistory(); } else location.hash = ''; }
   else if (!$('#screen-settings').classList.contains('hidden')) renderStats();
   else renderList();
 }
@@ -589,11 +731,15 @@ function signInSheet() {
 
 // Navigation is driven by the URL hash so the iPhone swipe-back gesture works:
 //   ""  → list,  "#ex/<id>" → exercise,  "#settings" → settings
+let firstRoute = true;   // no slide animation on the very first draw
 function route() {
   const h = location.hash.slice(1);
-  if (h.startsWith('ex/')) openExercise(h.slice(3));
-  else if (h === 'settings') { renderStats(); renderAccount(); show('#screen-settings'); }
-  else { stopRest(); currentId = null; setTab(tab); show('#screen-list'); }
+  const dir = firstRoute ? undefined : 'push';
+  closeSheet();   // a panel left open (e.g. swiped back with it up) shouldn't follow you to the next page
+  if (h.startsWith('ex/')) openExercise(h.slice(3), dir);
+  else if (h === 'settings') { renderStats(); renderAccount(); show('#screen-settings', dir); }
+  else { stopRest(); currentId = null; setTab(tab); show('#screen-list', firstRoute ? undefined : 'pop'); }
+  firstRoute = false;
 }
 window.addEventListener('hashchange', route);
 
@@ -604,6 +750,7 @@ $('#btn-settings').onclick = () => { location.hash = 'settings'; };
 $('#btn-settings-back').onclick = () => history.back();
 $('#btn-back').onclick = () => history.back();
 $('#btn-exercise-menu').onclick = exerciseMenu;
+$('#btn-fav').onclick = toggleFav;
 $('#btn-save-set').onclick = () => saveSet();   // not `= saveSet` — that would pass the click event as `force`
 $('#btn-export').onclick = exportBackup;
 $('#btn-signin').onclick = signInSheet;
